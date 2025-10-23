@@ -10,8 +10,8 @@ from torch.nn.init import constant_, xavier_uniform_
 
 from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
 
-from .block import DFL, BNContrastiveHead, ContrastiveHead, Proto, SELayer
-from .conv import Conv, DWConv, ConvGN
+from .block import DFL, BNContrastiveHead, ContrastiveHead, Proto
+from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
@@ -170,6 +170,7 @@ class Detect(nn.Module):
         scores, index = scores.flatten(1).topk(min(max_det, anchors))
         i = torch.arange(batch_size)[..., None]  # batch indices
         return torch.cat([boxes[i, index // nc], scores[..., None], (index % nc)[..., None].float()], dim=-1)
+
 
 # class Detect(nn.Module):
 #         """YOLO Detect head with Dual Pre-Conv Layers"""

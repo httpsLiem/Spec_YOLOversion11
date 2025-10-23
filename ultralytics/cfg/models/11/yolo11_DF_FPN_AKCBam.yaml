@@ -31,34 +31,34 @@ backbone:
 
 # YOLO11n head
 head:
-  - [ 4, 1, Conv, [ 256 ] ] #11
-  - [ 6, 1, Conv, [ 256 ] ] #12
-  - [ 10, 1, Conv, [ 256 ] ] #13
+  - [4, 1, Conv, [256]] #11
+  - [6, 1, Conv, [256]] #12
+  - [10, 1, Conv, [256]] #13
 
-  - [ 2, 1, DDWConv, [ 256, 33, 2, 1 ] ] #14
-  - [ 6, 1, DDWConv, [ 256, 7, 2, 1 ]] #15
+  - [2, 1, DDWConv, [256, 33, 2, 1]] #14
+  - [6, 1, DDWConv, [256, 7, 2, 1]] #15
 
-  - [[14, 11], 1, Fusion, ['SChannel']]
+  - [[14, 11], 1, Fusion, ["SChannel"]]
   - [-1, 2, C3k2, [256, False]] # 17
   - [-1, 1, AKCBAM, [256]] #18
   - [-1, 1, Conv, [256, 3, 2]]
 
-  - [[13, 15], 1, Fusion, ['SChannel']] #20
+  - [[13, 15], 1, Fusion, ["SChannel"]] #20
   - [-1, 2, C3k2, [256, False]] # 21
   - [-1, 1, AKCBAM, [256]] #22
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
 
-  - [[-1, 19, 12], 1, Fusion, ['SChannel']] #24
+  - [[-1, 19, 12], 1, Fusion, ["SChannel"]] #24
   - [-1, 2, C3k2, [256, False]] # 25
   - [-1, 1, AKCBAM, [256]] #26
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 11], 1, Fusion, ['SChannel']] #28
+  - [[-1, 11], 1, Fusion, ["SChannel"]] #28
   - [-1, 2, C3k2, [256, False]] # 29
   - [-1, 1, AKCBAM, [256]] #30
 
   - [26, 1, Conv, [256, 3, 2]]
-  - [[-1, 13], 1, Fusion, ['SChannel']] #32
+  - [[-1, 13], 1, Fusion, ["SChannel"]] #32
   - [-1, 2, C3k2, [256, True]] # 33
   - [-1, 1, AKCBAM, [256]] #34
 
