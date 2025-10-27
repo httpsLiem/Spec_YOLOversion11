@@ -7,60 +7,74 @@ import torch.nn.functional as F
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
-from .conv import Conv, ConvE, DWConv, GhostConv, LightConv, ConvGN, RepConv, autopad, LDConv, LDConv1, AKCBAM, HCoordAtt, GlobalContext, MSCSpatialAttention, GCT, Faster_Block, CBAM, SpatialAttention, ChannelAttention
+from .conv import (
+    GCT,
+    Conv,
+    DWConv,
+    Faster_Block,
+    GhostConv,
+    GlobalContext,
+    HCoordAtt,
+    LDConv,
+    LightConv,
+    MSCSpatialAttention,
+    RepConv,
+    autopad,
+)
 from .transformer import TransformerBlock
 
 __all__ = (
-    "DFL",
-    "HGBlock",
-    "HGStem",
-    "SPP",
-    "SPPF",
-    "SAPF",
     "C1",
     "C2",
+    "C2PSA",
     "C3",
-    "C2f",
-    "C2fAttn",
-    "ImagePoolingAttn",
-    "ContrastiveHead",
-    "BNContrastiveHead",
-    "C3x",
     "C3TR",
-    "C3Ghost",
-    "GhostBottleneck",
+    "CIB",
+    "DFL",
+    "ELAN1",
+    "PSA",
+    "SAPF",
+    "SPP",
+    "SPPELAN",
+    "SPPF",
+    "AConv",
+    "ADown",
+    "Attention",
+    "BNContrastiveHead",
     "Bottleneck",
-    "Cross_AKConv",
     "BottleneckCSP",
     "BottleneckX_CBam",
-    "Proto",
-    "RepC3",
-    "ResNetLayer",
-    "RepNCSPELAN4",
-    "ELAN1",
-    "ADown",
-    "AConv",
-    "SPPELAN",
+    "C2f",
+    "C2fAttn",
+    "C2fCIB",
+    "C2fPSA",
+    "C3Ghost",
+    "C3MSCk2",
+    "C3k2",
+    "C3k2GC",
+    "C3x",
     "CBFuse",
     "CBLinear",
-    "C3k2",
-    "C3MSCk2",
-    "XCBAM2C2f",
-    "C3k2GC",
-    "C2fPSA",
-    "C2PSA",
-    "RepVGGDW",
-    "CIB",
-    "C2fCIB",
-    "Attention",
-    "PSA",
-    "SCDown",
-    "TorchVision",
-    "S2CrossConvDilated",
+    "ContrastiveHead",
+    "Cross_AKConv",
+    "GhostBottleneck",
+    "HGBlock",
+    "HGStem",
+    "ImagePoolingAttn",
     "Mix_SPPF",
+    "Proto",
+    "RepC3",
+    "RepNCSPELAN4",
+    "RepVGGDW",
+    "ResNetLayer",
+    "S2CrossConvDilated",
+    "SCDown",
     "SELayer",
     "SaELayer",
+    "TorchVision",
+    "XCBAM2C2f",
 )
+
 
 class DFL(nn.Module):
     """
@@ -190,7 +204,8 @@ class SPPF(nn.Module):
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c_ * 4, c2, 1, 1)
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
-        #self.m = nn.MaxPool2d(kernel_size=(3, 1), stride=1, padding=(3 // 2, 0))
+        # self.m = nn.MaxPool2d(kernel_size=(3, 1), stride=1, padding=(3 // 2, 0))
+
     def forward(self, x):
         """Forward pass through Ghost Convolution block."""
         y = [self.cv1(x)]
@@ -200,13 +215,13 @@ class SPPF(nn.Module):
 
 class SELayer(nn.Module):
     def __init__(self, channel, reduction=16):
-        super(SELayer, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -214,38 +229,26 @@ class SELayer(nn.Module):
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
         return x * y.expand_as(x)
-    
+
+
 class SaELayer(nn.Module):
     def __init__(self, in_channel, reduction=32):
-        super(SaELayer, self).__init__()
-        assert in_channel>=reduction and in_channel%reduction==0,'invalid in_channel in SaElayer'
+        super().__init__()
+        assert in_channel >= reduction and in_channel % reduction == 0, "invalid in_channel in SaElayer"
         self.reduction = reduction
-        self.cardinality=4
+        self.cardinality = 4
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        #cardinality 1
-        self.fc1 = nn.Sequential(
-            nn.Linear(in_channel,in_channel//self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        # cardinality 1
+        self.fc1 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 2
-        self.fc2 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc2 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 3
-        self.fc3 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc3 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 4
-        self.fc4 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc4 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
 
         self.fc = nn.Sequential(
-            nn.Linear(in_channel//self.reduction*self.cardinality, in_channel, bias=False),
-            nn.Sigmoid()
+            nn.Linear(in_channel // self.reduction * self.cardinality, in_channel, bias=False), nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -255,12 +258,13 @@ class SaELayer(nn.Module):
         y2 = self.fc2(y)
         y3 = self.fc3(y)
         y4 = self.fc4(y)
-        y_concate = torch.cat([y1,y2,y3,y4],dim=1)
-        y_ex_dim = self.fc(y_concate).view(b,c,1,1)
+        y_concate = torch.cat([y1, y2, y3, y4], dim=1)
+        y_ex_dim = self.fc(y_concate).view(b, c, 1, 1)
 
         return x * y_ex_dim.expand_as(x)
-    
- ##############################################################   
+
+
+##############################################################
 # class SPPF(nn.Module):
 #     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
@@ -271,9 +275,9 @@ class SaELayer(nn.Module):
 #         """
 #         super().__init__()
 #         c_ = c1 // 2  # hidden channels
-#         self.cv1 = ConvE(c1, c_, 1, 1)  
+#         self.cv1 = ConvE(c1, c_, 1, 1)
 #         self.se_layer = SELayer(c_, reduction=16)  # SELayer
-#         self.cv2 = ConvE(c_ * 4, c2, 1, 1)  
+#         self.cv2 = ConvE(c_ * 4, c2, 1, 1)
 #         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 #         self.conv1x1_pooled = ConvE(c_, c_, 1, 1)  # 1x1 Conv cho pooled outputs
 
@@ -281,24 +285,24 @@ class SaELayer(nn.Module):
 #         """Forward pass through SPPF layer."""
 #         # Áp dụng cv1 lên input
 #         x_cv1 = self.cv1(x)  # Đầu ra của cv1, shape: [batch_size, c_, H, W]
-        
+
 #         # Nhánh cho concatenation: Áp dụng SELayer lên x_cv1
 #         y_se = self.se_layer(x_cv1)  # Tensor sẽ dùng để concatenate
-        
+
 #         # Nhánh cho max-pooling: Sử dụng trực tiếp x_cv1 (không qua SELayer)
 #         y = [y_se]  # Khởi tạo danh sách với tensor đã qua SELayer cho concatenation
 #         y.extend(self.m(x_cv1) for _ in range(3))  # Áp dụng max-pooling 3 lần trên x_cv1
-        
+
 #         # Áp dụng conv1x1_pooled và SELayer cho tất cả các tensor
 #         y = [self.conv1x1_pooled(l) for l in y]  # Áp dụng 1x1 Conv
 #         y = [self.se_layer(l) for l in y]  # Áp dụng SELayer
-        
+
 #         # Concatenate các tensor
 #         y = torch.cat(y, 1)  # Kết hợp 4 tensor, tạo tensor có 4*c_ kênh
-        
+
 #         # Đưa qua cv2
 #         return self.cv2(y)
- ##############################################################   
+##############################################################
 
 
 ##############################################################
@@ -314,9 +318,9 @@ class SaELayer(nn.Module):
 #         """
 #         super().__init__()
 #         c_ = c1 // 2  # hidden channels
-#         self.cv1 = Conv(c1, c_, 1, 1)  
+#         self.cv1 = Conv(c1, c_, 1, 1)
 #         self.se_layer = SELayer(c_, reduction=16)  # Thêm SELayer
-#         self.cv2 = Conv(c_ * 4, c2, 1, 1)  
+#         self.cv2 = Conv(c_ * 4, c2, 1, 1)
 #         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 #         self.conv1x1_pooled = Conv(c_, c_, 1, 1)  # Lớp 1x1 Conv cho pooled outputs
 
@@ -327,45 +331,44 @@ class SaELayer(nn.Module):
 #         y = self.se_layer(y[0])  # Áp dụng SELayer vào đầu ra của cv1
 #         y = [y]  # Đặt lại y thành danh sách để có thể sử dụng extend
 #         y.extend(self.m(y[-1]) for _ in range(3))  # Thực hiện MaxPool
-        
+
 #         #y = [self.se_layer(l) for l in y]  # Áp dụng SELayer
 #         # Áp dụng 1x1 Conv và SELayer cho các đầu ra từ MaxPooling
 #         y = [self.conv1x1_pooled(l) for l in y]  # Áp dụng 1x1 Conv
 #         y = [self.se_layer(l) for l in y]  # Áp dụng SELayer
-        
+
 #         # Kết hợp đầu ra của cv1 đã qua SELayer với các đầu ra từ MaxPooling
 #         y = torch.cat(y, 1)  # Kết hợp đầu ra của cv1 và các đầu ra từ MaxPooling
-        
-#         return self.cv2(y)  # Trả về đầu ra cuối cùng
 
+#         return self.cv2(y)  # Trả về đầu ra cuối cùng
 
 
 class Mix_SPPF(nn.Module):
     def __init__(self, c1, c2, k=5, dropout_rate=0.3):
         super().__init__()
         c_ = c1 // 2
-        self.cv1 = Conv(c1, c_, 1, 1)  
-        
+        self.cv1 = Conv(c1, c_, 1, 1)
+
         # Thêm SELayer sau 1x1 conv đầu tiên
         self.se_layer_after_cv1 = SELayer(c_)  # SELayer sau cv1
-        
+
         # Thêm 1x1 conv trước SELayer
         self.conv1x1_se = Conv(c_, c_, 1, 1)  # 1x1 conv trước SELayer
         self.se_layer = SELayer(c_)  # SELayer
-        
+
         self.dwconv = Conv(c_, c_, 3, 1, g=c_)  # 3x3 depthwise conv
         self.avgpool = nn.AvgPool2d(kernel_size=2, stride=1)  # Average pooling
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=1)  # Max pooling
         self.dropout = nn.Dropout(dropout_rate)  # Thêm Dropout
         self.conv1x1_final = Conv(c_ * 2, c2, 1, 1)  # 1x1 conv cuối cùng
-        
+
         # Thêm 1x1 conv mới sau nhánh 1
         self.conv1x1_after_branch1 = Conv(c_, c_, 1, 1)  # 1x1 conv mới
 
     def forward(self, x):
         x = self.cv1(x)  # Thực hiện 1x1 conv đầu tiên
         x = self.se_layer_after_cv1(x)  # Áp dụng SELayer sau cv1
-        
+
         # Nhánh 1: Thêm 1x1 conv, sau đó là 1x1 conv mới và depthwise conv
         branch1 = self.conv1x1_se(x)  # 1x1 conv trước SELayer
         branch1 = self.conv1x1_after_branch1(branch1)  # Áp dụng 1x1 conv mới
@@ -376,12 +379,11 @@ class Mix_SPPF(nn.Module):
         branch2 = self.maxpool(avg)  # Max pooling
 
         # Kết hợp các nhánh
-        branch2 = nn.functional.interpolate(branch2, size=branch1.shape[2:], mode='bilinear', align_corners=False)
+        branch2 = nn.functional.interpolate(branch2, size=branch1.shape[2:], mode="bilinear", align_corners=False)
         combined = torch.cat((branch1, branch2), dim=1)  # Kết hợp các nhánh
 
         combined = self.dropout(combined)  # Áp dụng Dropout
-        return self.conv1x1_final(combined) 
-
+        return self.conv1x1_final(combined)
 
 
 class SAPF(nn.Module):
@@ -470,6 +472,7 @@ class C2f(nn.Module):
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
 
+
 class XCBAM2C2f(nn.Module):
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         super().__init__()
@@ -478,15 +481,15 @@ class XCBAM2C2f(nn.Module):
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv((1 + n) * c_, c2, 1)  # optional act=FReLU(c2)
         self.n = n
-        self.m = nn.ModuleList(
-            nn.Sequential(*(BottleneckX_CBam(c_, c_, shortcut, g, k=3, e=1.0) for _ in range(n)))
-        )
+        self.m = nn.ModuleList(nn.Sequential(*(BottleneckX_CBam(c_, c_, shortcut, g, k=3, e=1.0) for _ in range(n))))
 
     def forward(self, x):
         """Forward pass through R-ELAN layer."""
         y = [self.cv1(x)]
         y.extend(m(y[-1]) for m in self.m)
         return x + self.cv2(torch.cat(y, 1))
+
+
 class C3(nn.Module):
     """CSP Bottleneck with 3 convolutions."""
 
@@ -502,6 +505,8 @@ class C3(nn.Module):
     def forward(self, x):
         """Forward pass through the CSP bottleneck with 2 convolutions."""
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+
+
 class C3GC(nn.Module):
     """CSP Bottleneck with 3 convolutions."""
 
@@ -514,10 +519,12 @@ class C3GC(nn.Module):
         self.cv3 = Conv(2 * c_, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, k=((1, 1), (3, 3)), e=1.0) for _ in range(n)))
         self.gc = GlobalContext(c_)
+
     def forward(self, x):
         """Forward pass through the CSP bottleneck with 2 convolutions."""
         # print(('gc'))
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.gc(self.cv2(x))), 1))
+
 
 class C3x(C3):
     """C3 module with cross-convolutions."""
@@ -564,6 +571,8 @@ class C3Ghost(C3):
         super().__init__(c1, c2, n, shortcut, g, e)
         c_ = int(c2 * e)  # hidden channels
         self.m = nn.Sequential(*(GhostBottleneck(c_, c_) for _ in range(n)))
+
+
 class GhostBottleneck(nn.Module):
     """Ghost Bottleneck https://github.com/huawei-noah/ghostnet."""
 
@@ -583,12 +592,15 @@ class GhostBottleneck(nn.Module):
     def forward(self, x):
         """Applies skip connection and concatenation to input tensor."""
         return self.conv(x) + self.shortcut(x)
+
+
 class BottleneckX_CBam(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
-        c_ = int(c2 * e)  # hidden channels
+        int(c2 * e)  # hidden channels
         # self.cv1 = Faster_Block(c1, c_)
         # self.cv4 = Faster_Block(c_, c2)
         # self.cv1 = CBAM(c1, 7)
@@ -602,6 +614,7 @@ class BottleneckX_CBam(nn.Module):
         # self.cv4 = CBAM(c2, 3)
         # self.cv4 = AKCBAM(c2, 3)
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         # print('y')
@@ -609,8 +622,10 @@ class BottleneckX_CBam(nn.Module):
         return x + self.cv1(x) if self.add else self.cv1(x)
         # return x + self.cv4(self.cv3(self.cv2(self.cv1(x)))) if self.add else self.cv4(self.cv3(self.cv2(self.cv1(x))))
 
+
 class BottleneckX_PConv(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
@@ -622,30 +637,35 @@ class BottleneckX_PConv(nn.Module):
         # self.cv4 = Faster_Block(c2, c2)
         self.cv4 = Conv(c2, c2, 3, 1, g=8)
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         # print('y')
         return x + self.cv4(self.cv3(self.cv2(self.cv1(x)))) if self.add else self.cv4(self.cv3(self.cv2(self.cv1(x))))
+
+
 class LightBottleneck(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
-        c_ = int(c2 * e)  # hidden channels
+        int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c1, k[0], 1, g=1)
         # self.cv2 = Conv(c1//2, c1 // 2, k[1], 1, g=1)
         self.add = shortcut and c1 == c2
         self.pool = nn.AdaptiveAvgPool2d(1)
-        mip = max(8, 2* c1 // 32)
-        self.conv1 = nn.Sequential(nn.Conv2d(2* c1, mip, kernel_size=1, stride=1, padding=0), nn.ReLU())
+        mip = max(8, 2 * c1 // 32)
+        self.conv1 = nn.Sequential(nn.Conv2d(2 * c1, mip, kernel_size=1, stride=1, padding=0), nn.ReLU())
         self.act = h_swish()
-        self.conv2 = nn.Conv2d(mip, 2* c1, kernel_size=1, stride=1, padding=0)
-        self.conv3 = Conv(2* c1, c2, 1, 1, g=8)
+        self.conv2 = nn.Conv2d(mip, 2 * c1, kernel_size=1, stride=1, padding=0)
+        self.conv3 = Conv(2 * c1, c2, 1, 1, g=8)
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         x1 = self.cv1(x)
         # x2 = self.cv2(x1)
-        z = torch.cat((x, x1),1)
+        z = torch.cat((x, x1), 1)
         y = self.pool(z)
         y = self.conv1(y)
         a_y = self.act(self.conv2(y))
@@ -653,6 +673,8 @@ class LightBottleneck(nn.Module):
         out = self.conv3(out)
         return x + out if self.add else out
         # return x + self.fc1(self.fc(self.pool(torch.cat((x1, x2),1)))) if self.add else self.fc1(self.fc(self.pool(torch.cat((x1, x2),1))))
+
+
 class SLBottleneck(nn.Module):
     """Standard bottleneck."""
 
@@ -667,9 +689,11 @@ class SLBottleneck(nn.Module):
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+
+
 class h_sigmoid(nn.Module):
     def __init__(self, inplace=True):
-        super(h_sigmoid, self).__init__()
+        super().__init__()
         self.relu = nn.ReLU6(inplace=inplace)
 
     def forward(self, x):
@@ -678,31 +702,35 @@ class h_sigmoid(nn.Module):
 
 class h_swish(nn.Module):
     def __init__(self, inplace=True):
-        super(h_swish, self).__init__()
+        super().__init__()
         self.sigmoid = h_sigmoid(inplace=inplace)
 
     def forward(self, x):
         return x * self.sigmoid(x)
+
+
 class LightBottleneck1(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
-        c_ = int(c2 * e)  # hidden channels
-        self.cv1 = Conv(c1, c1//2, k[0], 1, g=1)
-        self.cv2 = Conv(c1//2, c1 // 2, k[1], 1, g=1)
+        int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c1 // 2, k[0], 1, g=1)
+        self.cv2 = Conv(c1 // 2, c1 // 2, k[1], 1, g=1)
         self.add = shortcut and c1 == c2
         self.pool = nn.AdaptiveAvgPool2d(1)
-        mip = max(8, 2*c1 // 32)
-        self.conv1 = nn.Sequential(nn.Conv2d(2*c1, mip, kernel_size=1, stride=1, padding=0), nn.ReLU())
+        mip = max(8, 2 * c1 // 32)
+        self.conv1 = nn.Sequential(nn.Conv2d(2 * c1, mip, kernel_size=1, stride=1, padding=0), nn.ReLU())
         self.act = h_swish()
-        self.conv2 = nn.Conv2d(mip, 2*c1, kernel_size=1, stride=1, padding=0)
-        self.conv3 = Conv(2*c1, c2, 1, 1, g=8)
+        self.conv2 = nn.Conv2d(mip, 2 * c1, kernel_size=1, stride=1, padding=0)
+        self.conv3 = Conv(2 * c1, c2, 1, 1, g=8)
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         x1 = self.cv1(x)
         x2 = self.cv2(x1)
-        z = torch.cat((x, x1, x2),1)
+        z = torch.cat((x, x1, x2), 1)
         y = self.pool(z)
         y = self.conv1(y)
         a_y = self.act(self.conv2(y))
@@ -710,6 +738,8 @@ class LightBottleneck1(nn.Module):
         out = self.conv3(out)
         return x + out if self.add else out
         # return x + self.fc1(self.fc(self.pool(torch.cat((x1, x2),1)))) if self.add else self.fc1(self.fc(self.pool(torch.cat((x1, x2),1))))
+
+
 class Bottleneck(nn.Module):
     """Standard bottleneck."""
 
@@ -724,6 +754,8 @@ class Bottleneck(nn.Module):
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+
+
 # class BottleNect(nn.Module):
 #     def __init__(self, dim) -> None:
 #         super().__init__()
@@ -784,26 +816,23 @@ class BottleNect(nn.Module):
         super().__init__()
 
         ker = 63
-        pad = ker // 2
-        self.in_conv = nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=1, padding=0, stride=1),
-                    nn.GELU()
-                    )
+        ker // 2
+        self.in_conv = nn.Sequential(nn.Conv2d(dim, dim, kernel_size=1, padding=0, stride=1), nn.GELU())
         self.out_conv = nn.Conv2d(dim, dim, kernel_size=1, padding=0, stride=1)
         # self.dw_13 = nn.Conv2d(dim, dim, kernel_size=(1,ker), padding=(0,pad), stride=1, groups=dim)
         # self.dw_31 = nn.Conv2d(dim, dim, kernel_size=(ker,1), padding=(pad,0), stride=1, groups=dim)
         # self.dw_33 = nn.Conv2d(dim, dim, kernel_size=ker, padding=pad, stride=1, groups=dim)
-        self.dw_11 = nn.Conv2d(dim, dim, kernel_size=3, padding=3//2, stride=1, groups=dim)
+        self.dw_11 = nn.Conv2d(dim, dim, kernel_size=3, padding=3 // 2, stride=1, groups=dim)
 
         self.act = nn.ReLU()
 
         ### sca ###
         self.conv = nn.Conv2d(dim, dim, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
-        self.pool = nn.AdaptiveAvgPool2d((1,1))
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
 
         ### fca ###
         self.fac_conv = nn.Conv2d(dim, dim, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
-        self.fac_pool = nn.AdaptiveAvgPool2d((1,1))
+        self.fac_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fgm = FGM(dim)
 
     def forward(self, x):
@@ -811,11 +840,11 @@ class BottleNect(nn.Module):
 
         ### fca ###
         x_att = self.fac_conv(self.fac_pool(out))
-        x_fft = torch.fft.fft2(out, norm='backward')
+        x_fft = torch.fft.fft2(out, norm="backward")
         # print(x_fft.dtype)  # Kiểm tra kiểu dữ liệu sau FFT
         # print(x_att.dtype)
         x_fft = x_att * x_fft
-        x_fca = torch.fft.ifft2(x_fft, dim=(-2,-1), norm='backward')
+        x_fca = torch.fft.ifft2(x_fft, dim=(-2, -1), norm="backward")
         x_fca = torch.abs(x_fca)
 
         ### fca ###
@@ -835,11 +864,13 @@ class BottleNect(nn.Module):
         # print("omn")
         return out
         # return self.out_conv(out)
+
+
 class FGM(nn.Module):
     def __init__(self, dim) -> None:
         super().__init__()
 
-        self.conv = nn.Conv2d(dim, dim*2, 3, 1, 1)
+        self.conv = nn.Conv2d(dim, dim * 2, 3, 1, 1)
 
         self.dwconv1 = nn.Conv2d(dim, dim, 1, 1, groups=1)
         self.dwconv2 = nn.Conv2d(dim, dim, 1, 1, groups=1)
@@ -848,20 +879,23 @@ class FGM(nn.Module):
 
     def forward(self, x):
         # res = x.clone()
-        fft_size = x.size()[2:]
+        x.size()[2:]
         x1 = self.dwconv1(x)
         x2 = self.dwconv2(x)
 
-        x2_fft = torch.fft.fft2(x2, norm='backward')
+        x2_fft = torch.fft.fft2(x2, norm="backward")
 
         out = x1 * x2_fft
 
-        out = torch.fft.ifft2(out, dim=(-2,-1), norm='backward')
+        out = torch.fft.ifft2(out, dim=(-2, -1), norm="backward")
         out = torch.abs(out)
 
         return out * self.alpha + x * self.beta
+
+
 class MSBottleneck(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
@@ -870,13 +904,17 @@ class MSBottleneck(nn.Module):
         self.cv2 = Conv(c_, c2, k[1], 1, g=g)
         self.add = shortcut and c1 == c2
         self.msc = MSCSpatialAttention(c2)
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         # print("MSC")
         # return x + self.msc(self.cv2(self.cv1(x))) if self.add else self.msc(self.cv2(self.cv1(x)))
         return x + self.cv2(self.cv1(self.msc(x))) if self.add else self.cv2(self.cv1(self.msc(x)))
+
+
 class Cross_AKConv(nn.Module):
     """Standard bottleneck."""
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
@@ -889,9 +927,10 @@ class Cross_AKConv(nn.Module):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
+
 class DualChannelHConv(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -903,15 +942,12 @@ class DualChannelHConv(nn.Module):
         self.cv1_1 = Conv(c1, c2, (1, 1), 1)
         self.cv3_1 = Conv(c1, c_, (3, 1), 1)
         self.cv7_1 = Conv(c1, c_, (3, 1), 1)
-        self.se = nn.Sequential(
-            Conv(2 * c_, c_, 1, act=nn.ReLU()),
-            Conv(c_, c2, 1, act=nn.ReLU()))
-        self.hca = HCoordAtt(c2, c2,32)
+        self.se = nn.Sequential(Conv(2 * c_, c_, 1, act=nn.ReLU()), Conv(c_, c2, 1, act=nn.ReLU()))
+        self.hca = HCoordAtt(c2, c2, 32)
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
-
-
         x3 = self.cv3_1(x)
 
         x7 = self.cv7_1(x)
@@ -920,9 +956,11 @@ class DualChannelHConv(nn.Module):
         output = self.se(cat)
         output = self.hca(output)
         return x + output if self.add else output
+
+
 class CrossConvDilated(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -938,12 +976,14 @@ class CrossConvDilated(nn.Module):
         self.cv5_1 = Conv(c1, c_, (1, k), (1, s), d=3)
         self.cv5_2 = Conv(c_, c2, (k, 1), (s, 1), d=3)
         self.squeeze = Conv(3 * c2, c2, 1)
-        self.fc = nn.Sequential(nn.Conv2d(3 * c2, max(3*c2/32,8), 1, 1, 0, bias=True),
-                                # nn.BatchNorm2d(8),
-                                nn.ReLU())
-        self.fc1 = nn.Sequential(nn.Conv2d(max(3*c2/32,8), c2, kernel_size=1, stride=1, padding=0),
-                                 nn.ReLU())
+        self.fc = nn.Sequential(
+            nn.Conv2d(3 * c2, max(3 * c2 / 32, 8), 1, 1, 0, bias=True),
+            # nn.BatchNorm2d(8),
+            nn.ReLU(),
+        )
+        self.fc1 = nn.Sequential(nn.Conv2d(max(3 * c2 / 32, 8), c2, kernel_size=1, stride=1, padding=0), nn.ReLU())
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         x1 = self.cv1_1(x)
@@ -960,9 +1000,11 @@ class CrossConvDilated(nn.Module):
 
         # return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
         return x + output if self.add else output
+
+
 class S2DenseCrossConvDilated(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -984,13 +1026,15 @@ class S2DenseCrossConvDilated(nn.Module):
 
         self.gct = GCT(c2)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
-                                # nn.BatchNorm2d(8),
-                                nn.ReLU())
-        self.fc1 = nn.Sequential(nn.Conv2d(8, c2, kernel_size=1, stride=1, padding=0),
-                                 nn.ReLU())
+        self.fc = nn.Sequential(
+            nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
+            # nn.BatchNorm2d(8),
+            nn.ReLU(),
+        )
+        self.fc1 = nn.Sequential(nn.Conv2d(8, c2, kernel_size=1, stride=1, padding=0), nn.ReLU())
         self.act = nn.ReLU()
         # self.act = nn.Sigmoid()
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         x1_1 = self.cv1_1(x)
@@ -1004,7 +1048,6 @@ class S2DenseCrossConvDilated(nn.Module):
         c1 = self.fc1(self.fc(x7))
         c2 = self.fc1(self.fc(x7))
 
-
         x1_o = x1_2 * c1
         x2_o = x2_2 * c2
         # x1_1 = self.gct(x1)
@@ -1014,9 +1057,11 @@ class S2DenseCrossConvDilated(nn.Module):
         # print('msc')
         # return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
         return x + output if self.add else output
+
+
 class S2CrossConvDilated(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -1038,14 +1083,15 @@ class S2CrossConvDilated(nn.Module):
 
         self.gct = GCT(c2)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
-                                nn.BatchNorm2d(8),
-                                nn.ReLU())
-        self.fc1 = nn.Sequential(nn.Conv2d(8, c2, kernel_size=1, stride=1, padding=0),
-                                 # nn.ReLU()
-                                 nn.Softmax())
+        self.fc = nn.Sequential(nn.Conv2d(c1, 8, 1, 1, 0, bias=True), nn.BatchNorm2d(8), nn.ReLU())
+        self.fc1 = nn.Sequential(
+            nn.Conv2d(8, c2, kernel_size=1, stride=1, padding=0),
+            # nn.ReLU()
+            nn.Softmax(),
+        )
         # self.act = nn.ReLU()
         # self.act = nn.Sigmoid()
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         x1 = self.cv1_1(x)
@@ -1059,7 +1105,6 @@ class S2CrossConvDilated(nn.Module):
         c1 = self.fc1(self.fc(x7))
         c2 = self.fc1(self.fc(x7))
 
-
         x1_1 = x1 * c1
         x2_1 = x2 * c2
         # x1_1 = self.gct(x1)
@@ -1069,9 +1114,11 @@ class S2CrossConvDilated(nn.Module):
         # print('msc')
         # return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
         return x + output if self.add else output
+
+
 class DenseCross(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=True, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=True, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -1083,18 +1130,21 @@ class DenseCross(nn.Module):
         self.cv1_1 = Conv(c1, c_, (k, 1), (1, 1), d=1)
         self.cv1_2 = Conv(c_, c2, (1, k), (1, 1), d=1)
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
-        batch, channels, _, _ = x.shape
+        _batch, _channels, _, _ = x.shape
         # Multi-branch feature extraction
         x1_1 = self.cv1_1(x)
-        x1_2 = self.cv1_2(x1_1+x)
+        x1_2 = self.cv1_2(x1_1 + x)
         x1 = x1_1 + x1_2
 
         return x + x1 if self.add else x1
+
+
 class S2CrossConvDilatedDenseReal(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -1116,16 +1166,19 @@ class S2CrossConvDilatedDenseReal(nn.Module):
 
         self.gct = GCT(c2)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
-                                # nn.BatchNorm2d(8),
-                                nn.ReLU())
-        self.fc1 = nn.Sequential(nn.Conv2d(8, c2*2, kernel_size=1, stride=1, padding=0))
-                                 # nn.ReLU()
-                                 # nn.Softmax(dim=1))
+        self.fc = nn.Sequential(
+            nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
+            # nn.BatchNorm2d(8),
+            nn.ReLU(),
+        )
+        self.fc1 = nn.Sequential(nn.Conv2d(8, c2 * 2, kernel_size=1, stride=1, padding=0))
+        # nn.ReLU()
+        # nn.Softmax(dim=1))
 
         self.softmax = nn.Softmax(dim=1)
         # self.act = nn.ReLU()
         # self.act = nn.Sigmoid()
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         batch, channels, _, _ = x.shape
@@ -1149,9 +1202,11 @@ class S2CrossConvDilatedDenseReal(nn.Module):
         # Selective feature reweighting
         output = a_b[:, 0] * x1 + a_b[:, 1] * x2
         return x + output if self.add else output
+
+
 class S2CrossConvDilatedReal(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -1173,16 +1228,19 @@ class S2CrossConvDilatedReal(nn.Module):
 
         self.gct = GCT(c2)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
-                                # nn.BatchNorm2d(8),
-                                nn.ReLU())
-        self.fc1 = nn.Sequential(nn.Conv2d(8, c2*2, kernel_size=1, stride=1, padding=0))
-                                 # nn.ReLU()
-                                 # nn.Softmax(dim=1))
+        self.fc = nn.Sequential(
+            nn.Conv2d(c1, 8, 1, 1, 0, bias=True),
+            # nn.BatchNorm2d(8),
+            nn.ReLU(),
+        )
+        self.fc1 = nn.Sequential(nn.Conv2d(8, c2 * 2, kernel_size=1, stride=1, padding=0))
+        # nn.ReLU()
+        # nn.Softmax(dim=1))
 
         self.softmax = nn.Softmax(dim=1)
         # self.act = nn.ReLU()
         # self.act = nn.Sigmoid()
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         batch, channels, _, _ = x.shape
@@ -1206,9 +1264,11 @@ class S2CrossConvDilatedReal(nn.Module):
         # Selective feature reweighting
         output = a_b[:, 0] * x1 + a_b[:, 1] * x2
         return x + output if self.add else output
+
+
 class SCrossConvDilated(nn.Module):
     # Cross Convolution Downsample
-    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1 ):
+    def __init__(self, c1, c2, shortcut=False, g=1, k=3, e=0.5, s=1):
         """
         Initializes CrossConv with downsampling, expanding, and optionally shortcutting; `c1` input, `c2` output
         channels.
@@ -1230,6 +1290,7 @@ class SCrossConvDilated(nn.Module):
         self.fc = nn.Conv2d(c1, c1, 1, 1, 0, bias=True)
         # self.act = nn.Sigmoid()
         self.act = nn.ReLU()
+
     def forward(self, x):
         """Performs feature sampling, expanding, and applies shortcut if channels match; expects `x` input tensor."""
         x1 = self.cv1_1(x)
@@ -1241,7 +1302,7 @@ class SCrossConvDilated(nn.Module):
         x5 = self.cv5_1(x)
         x5 = self.cv5_2(x5)
 
-        x6 = x1+x2+x5
+        x6 = x1 + x2 + x5
 
         x7 = self.pool(x6)
         c1 = self.act(self.fc(x7))
@@ -1256,6 +1317,8 @@ class SCrossConvDilated(nn.Module):
 
         # return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
         return x + output if self.add else output
+
+
 class RepCross(torch.nn.Module):
     def __init__(self, c1, c2, k=3, s=1, g=1, e=1.0, shortcut=False) -> None:
         super().__init__()
@@ -1282,6 +1345,8 @@ class RepCross(torch.nn.Module):
         attn = x0 + attn_0 + attn_2
         # return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
         return x + attn if self.add else attn
+
+
 class BottleneckCSP(nn.Module):
     """CSP Bottleneck https://github.com/WongKinYiu/CrossStagePartialNetworks."""
 
@@ -1664,11 +1729,14 @@ class C3k2(C2f):
         super().__init__(c1, c2, n, shortcut, g, e)
         self.m = nn.ModuleList(
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else RepBottleneck(self.c, self.c, shortcut, g) for _ in range(n)
-            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
+            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g)
+            for _ in range(n)
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else LightBottleneck1(self.c, self.c, shortcut, g) for _ in range(n)
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else BottleneckX_CBam(self.c, self.c, shortcut, g) for _ in range(n)
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else AKCBAM(self.c) for _ in range(n)
         )
+
+
 class C3k(C3):
     """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
@@ -1682,6 +1750,7 @@ class C3k(C3):
         # self.m = nn.Sequential(*(BottleneckX_CBam(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
         # self.m = nn.Sequential(*(LightBottleneck1(c_, c_, shortcut, g, k=((k, 1), (1, k)), e=1.0) for _ in range(n)))
         # self.m = nn.Sequential(*(LightBottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
+
 
 # class C3k2GC(C2f):
 #     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
@@ -1705,24 +1774,30 @@ class C3k(C3):
 #         # self.m = nn.Sequential(*(Cross_AKConv(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
 class C3k2GC(C2f):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
+
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         """Initializes the C3k2 module, a faster CSP Bottleneck with 2 convolutions and optional C3k blocks."""
         super().__init__(c1, c2, n, shortcut, g, e)
         self.m = nn.ModuleList(
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else Cross_AKConv(self.c, self.c, shortcut, g) for _ in range(n)
-            C3kGC(self.c, self.c, 2, shortcut, g) if c3k else BottleNect(self.c) for _ in range(n)
+            C3kGC(self.c, self.c, 2, shortcut, g) if c3k else BottleNect(self.c)
+            for _ in range(n)
             # C3k(self.c, self.c, 2, shortcut, g) if c3k else AKCBAM(self.c) for _ in range(n)
         )
+
+
 class C3kGC(C3GC):
     """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, k=3):
         """Initializes the C3k module with specified channels, number of layers, and configurations."""
         super().__init__(c1, c2, n, shortcut, g, e)
-        c_ = int(c2 * e)  # hidden channels
+        int(c2 * e)  # hidden channels
         # self.m = nn.Sequential(*(RepBottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
         self.m = nn.Sequential(*(BottleNect(self.c) for _ in range(n)))
         # self.m = nn.Sequential(*(Cross_AKConv(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
+
+
 class C3MSCk2(C2f):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
 
@@ -1733,12 +1808,14 @@ class C3MSCk2(C2f):
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else Cross_AKConv(self.c, self.c, shortcut, g) for _ in range(n)
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else S2CrossConvDilated(self.c, self.c, shortcut, g) for _ in range(n)
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else S2CrossConvDilatedReal(self.c, self.c, shortcut, g) for _ in range(n)
-            C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else DenseCross(self.c, self.c, shortcut, g) for _ in range(n)
-
+            C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else DenseCross(self.c, self.c, shortcut, g)
+            for _ in range(n)
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else S2DenseCrossConvDilated(self.c, self.c, shortcut, g) for _ in range(n)
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else BottleneckX_CBam(self.c, self.c, shortcut, g) for _ in range(n)
             # C3MSCk(self.c, self.c, 2, shortcut, g) if c3k else AKCBAM(self.c) for _ in range(n)
         )
+
+
 class C3MSCk(C3):
     """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
@@ -1753,6 +1830,7 @@ class C3MSCk(C3):
         self.m = nn.Sequential(*(DenseCross(c_, c_, shortcut, g, k=3, e=1.0) for _ in range(n)))
         # self.m = nn.Sequential(*(BottleneckX_CBam(c_, c_, shortcut, g, k=3, e=1.0) for _ in range(n)))
         # self.m = nn.Sequential(*(Cross_AKConv(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
+
 
 class RepVGGDW(torch.nn.Module):
     """RepVGGDW is a class that represents a depth wise separable convolutional block in RepVGG architecture."""
@@ -1908,7 +1986,6 @@ class Attention(nn.Module):
         self.pe = Conv(dim, dim, 3, 1, g=dim, act=False)
         # self.pe = nn.Sequential(nn.AdaptiveAvgPool2d((None, 1)), nn.AdaptiveAvgPool2d((1, None)))
 
-
     def forward(self, x):
         """
         Forward pass of the Attention module.
@@ -1932,6 +2009,7 @@ class Attention(nn.Module):
         x = self.proj(x)
         return x
 
+
 # class Attention(nn.Module):
 #     def __init__(self, dim, num_heads=8, attn_ratio=0.5, reduction_ratio=1):
 #         super().__init__()
@@ -1944,7 +2022,7 @@ class Attention(nn.Module):
 #         self.qkv = Conv(dim, h, 1, act=False)
 #         self.proj = Conv(dim, dim, 1, act=False)
 #         self.pe = Conv(dim, dim, 3, 1, g=dim, act=False)
-        
+
 #         # New parameters for sequence reduction
 #         self.reduction_ratio = reduction_ratio
 #         self.linear_k = nn.Linear(self.key_dim * num_heads, self.key_dim * num_heads // reduction_ratio)
@@ -1969,6 +2047,7 @@ class Attention(nn.Module):
 #         x = (v @ attn.transpose(-2, -1)).view(B, C, H, W) + self.pe(v.reshape(B, C, H, W))
 #         x = self.proj(x)
 #         return x
+
 
 class PSABlock(nn.Module):
     """
@@ -2030,7 +2109,7 @@ class PSABlock(nn.Module):
 #         super().__init__()
 
 #         self.attn = Attention(c, attn_ratio=attn_ratio, num_heads=num_heads)
-        
+
 #         mid = c * expansion
 #         self.ffn = nn.Sequential(
 #             # 1×1 pointwise expand
@@ -2053,6 +2132,7 @@ class PSABlock(nn.Module):
 #         return x
 
 ######################################################################
+
 
 class PSA(nn.Module):
     """
