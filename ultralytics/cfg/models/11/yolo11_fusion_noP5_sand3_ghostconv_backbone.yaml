@@ -29,17 +29,17 @@ backbone:
 
 # YOLO11n head
 head:
-  - [ 2, 1, DDWConv, [ 256, 7, 2,  2 ]] #9
-  - [ 4, 1, Conv, [ 256 ] ] #10
-#  - [ 4, 1, DDWConv, [ 256, 3, 2,  2 ]] #11
-  - [ 8, 1, Conv, [ 256 ] ] #11
+  - [2, 1, DDWConv, [256, 7, 2, 2]] #9
+  - [4, 1, Conv, [256]] #10
+  #  - [ 4, 1, DDWConv, [ 256, 3, 2,  2 ]] #11
+  - [8, 1, Conv, [256]] #11
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 9, 10], 1, Fusion, ['SChannel']] # cat backbone P4
+  - [[-1, 9, 10], 1, Fusion, ["SChannel"]] # cat backbone P4
   - [-1, 2, C3k2, [256, False]] # 14
 
   - [-1, 1, Conv, [256, 3, 2]]
-  - [[-1, 11], 1, Fusion, ['SChannel']] # cat head P4
+  - [[-1, 11], 1, Fusion, ["SChannel"]] # cat head P4
   - [-1, 2, C3k2, [256, False]] # 17 (P4/16-medium)
 
   - [[14, 17], 1, Detect, [nc]] # Detect(P3, P4, P5)
