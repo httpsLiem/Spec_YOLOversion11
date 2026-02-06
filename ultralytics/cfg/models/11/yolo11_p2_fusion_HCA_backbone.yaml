@@ -35,39 +35,33 @@ backbone:
 
 # YOLO11n head
 head:
-  - [ 3, 1, Conv, [ 256 ] ] #15
-  - [ 6, 1, Conv, [ 256 ] ] #16
-  - [ 9, 1, Conv, [ 256 ] ] #17
-  - [ 14, 1, Conv, [ 256 ] ] #18
+  - [3, 1, Conv, [256]] #15
+  - [6, 1, Conv, [256]] #16
+  - [9, 1, Conv, [256]] #17
+  - [14, 1, Conv, [256]] #18
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 17], 1, Fusion, ['SChannel']] # cat backbone P4
+  - [[-1, 17], 1, Fusion, ["SChannel"]] # cat backbone P4
   - [-1, 2, C3k2, [256, False]] # 21
 
-
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 16], 1, Fusion, ['SChannel']] # cat backbone P3
+  - [[-1, 16], 1, Fusion, ["SChannel"]] # cat backbone P3
   - [-1, 2, C3k2, [256, False]] # 24 (P3/8-small)
 
-
-  - [ -1, 1, nn.Upsample, [ None, 2, "nearest" ] ]
-  - [ [ -1, 15], 1, Fusion, ['SChannel']] # cat backbone P3
-  - [ -1, 2, C3k2, [ 256, False ] ] # 27 (P3/8-tiny)
-
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 15], 1, Fusion, ["SChannel"]] # cat backbone P3
+  - [-1, 2, C3k2, [256, False]] # 27 (P3/8-tiny)
 
   - [-1, 1, Conv, [256, 3, 2]]
-  - [[-1, 24], 1, Fusion, ['SChannel']] # cat head P4
+  - [[-1, 24], 1, Fusion, ["SChannel"]] # cat head P4
   - [-1, 2, C3k2, [256, False]] # 30 (P4/16-medium)
 
-
-  - [ -1, 1, Conv, [ 256, 3, 2 ] ]
-  - [ [ -1, 21], 1, Fusion, ['SChannel']] # cat head P4
-  - [ -1, 2, C3k2, [ 256, False ] ] # 33 (P4/16-medium)
-
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 21], 1, Fusion, ["SChannel"]] # cat head P4
+  - [-1, 2, C3k2, [256, False]] # 33 (P4/16-medium)
 
   - [-1, 1, Conv, [256, 3, 2]]
-  - [[-1, 18], 1, Fusion, ['SChannel']] # cat head P5
+  - [[-1, 18], 1, Fusion, ["SChannel"]] # cat head P5
   - [-1, 2, C3k2, [256, True]] # 36 (P5/32-large)
-
 
   - [[27, 30, 33, 36], 1, Detect, [nc]] # Detect(P3, P4, P5)
